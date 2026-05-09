@@ -711,122 +711,226 @@ export default function OtaUpdate() {
           </CardContent>
         </Card>
 
-        {hasPendingUpdate && pendingMeta && (
-          <Card sx={{ borderColor: 'warning.main', borderWidth: 2, borderStyle: 'solid' }}>
-            <CardContent>
-              <Box display="flex" alignItems="center" gap={1} mb={2}>
-                <Warning color="warning" />
-                <Typography variant="h6">待安装更新</Typography>
-                <Chip
-                  label={pendingMeta.version}
-                  color="warning"
-                  size="small"
-                  sx={{ ml: 1 }}
-                />
-              </Box>
-              <TableContainer>
-                <Table size="small">
-                  <TableBody>
-                    <TableRow>
-                      <TableCell component="th" sx={{ width: 150 }}>版本号</TableCell>
-                      <TableCell>{pendingMeta.version}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th">Commit</TableCell>
-                      <TableCell sx={{ fontFamily: 'monospace' }}>{pendingMeta.commit}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th">构建时间</TableCell>
-                      <TableCell>{formatDateTime(pendingMeta.build_time)}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th">架构</TableCell>
-                      <TableCell>{pendingMeta.arch}</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </TableContainer>
-              <Divider sx={{ my: 2 }} />
-              <Stack direction="row" spacing={2}>
-                <Button
-                  variant="contained"
-                  color="success"
-                  startIcon={<SystemUpdateAlt />}
-                  onClick={() => setConfirmDialog('apply')}
-                  disabled={applying}
-                >
-                  {applying ? <CircularProgress size={20} /> : '应用更新'}
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  startIcon={<Cancel />}
-                  onClick={() => setConfirmDialog('cancel')}
-                >
-                  取消更新
-                </Button>
-              </Stack>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card>
-          <CardContent>
-            <Box display="flex" justifyContent="space-between" alignItems="center" gap={2} mb={2}>
-              <Box display="flex" alignItems="center" gap={1}>
-                <Public color="primary" />
-                <Typography variant="h6">在线更新</Typography>
-              </Box>
-              <Link href={GITHUB_LATEST_RELEASE_PAGE} target="_blank" rel="noreferrer" variant="caption" underline="hover">
-                GitHub Releases
-              </Link>
-            </Box>
-
-            <Typography variant="body2" color="text.secondary" mb={2}>
-              连接到 GitHub 检查是否有可用的 SimAdmin 更新版本。
-            </Typography>
-
-            <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-              <Stack spacing={2}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={proxyEnabled}
-                      onChange={event => setProxyEnabled(event.target.checked)}
+        {(hasPendingUpdate && pendingMeta) || uploadResult ? (
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems="stretch">
+            {hasPendingUpdate && pendingMeta && (
+              <Card sx={{ flex: 1, minWidth: 0, borderColor: 'warning.main', borderWidth: 2, borderStyle: 'solid' }}>
+                <CardContent>
+                  <Box display="flex" alignItems="center" gap={1} mb={2}>
+                    <Warning color="warning" />
+                    <Typography variant="h6">待安装更新</Typography>
+                    <Chip
+                      label={pendingMeta.version}
+                      color="warning"
+                      size="small"
+                      sx={{ ml: 1 }}
                     />
-                  }
-                  label="启用 GitHub 下载加速"
-                />
-                {proxyEnabled && (
-                  <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
-                    <FormControl fullWidth size="small">
-                      <InputLabel id="proxy-preset-label">加速节点</InputLabel>
-                      <Select
-                        labelId="proxy-preset-label"
-                        label="加速节点"
-                        value={proxyPreset}
-                        onChange={event => setProxyPreset(event.target.value as ProxyPreset)}
-                      >
-                        <MenuItem value="https://gh-proxy.com/">gh-proxy.com (默认)</MenuItem>
-                        <MenuItem value="https://ghproxy.net/">ghproxy.net</MenuItem>
-                        <MenuItem value="https://githubproxy.cc/">githubproxy.cc</MenuItem>
-                        <MenuItem value="custom">自定义</MenuItem>
-                      </Select>
-                    </FormControl>
-                    {proxyPreset === 'custom' && (
-                      <TextField
-                        fullWidth
-                        size="small"
-                        label="自定义加速节点"
-                        value={customProxy}
-                        onChange={event => setCustomProxy(event.target.value)}
-                        placeholder="https://my-proxy.example.com/"
-                      />
-                    )}
+                  </Box>
+                  <TableContainer>
+                    <Table size="small">
+                      <TableBody>
+                        <TableRow>
+                          <TableCell component="th" sx={{ width: 150 }}>版本号</TableCell>
+                          <TableCell>{pendingMeta.version}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell component="th">Commit</TableCell>
+                          <TableCell sx={{ wordBreak: 'break-all' }}>{pendingMeta.commit}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell component="th">构建时间</TableCell>
+                          <TableCell>{formatDateTime(pendingMeta.build_time)}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell component="th">架构</TableCell>
+                          <TableCell>{pendingMeta.arch}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                  <Divider sx={{ my: 2 }} />
+                  <Stack direction="row" spacing={2}>
+                    <Button
+                      variant="contained"
+                      color="success"
+                      startIcon={<SystemUpdateAlt />}
+                      onClick={() => setConfirmDialog('apply')}
+                      disabled={applying}
+                    >
+                      {applying ? <CircularProgress size={20} /> : '应用更新'}
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      startIcon={<Cancel />}
+                      onClick={() => setConfirmDialog('cancel')}
+                    >
+                      取消更新
+                    </Button>
                   </Stack>
-                )}
-              </Stack>
-            </Paper>
+                </CardContent>
+              </Card>
+            )}
+
+            {uploadResult && (
+              <Card
+                sx={{
+                  flex: 1,
+                  minWidth: 0,
+                  ...(uploadResult.validation.valid
+                    ? { borderColor: 'success.main', borderWidth: 2, borderStyle: 'solid' }
+                    : {}),
+                }}
+              >
+                <CardContent>
+                  <Box display="flex" alignItems="center" gap={1} mb={2}>
+                    {uploadResult.validation.valid ? (
+                      <CheckCircle color="success" />
+                    ) : (
+                      <ErrorIcon color="error" />
+                    )}
+                    <Typography variant="h6">
+                      验证结果
+                    </Typography>
+                    <Chip
+                      label={uploadResult.validation.valid ? '通过' : '失败'}
+                      color={uploadResult.validation.valid ? 'success' : 'error'}
+                      size="small"
+                    />
+                  </Box>
+
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableBody>
+                        <TableRow>
+                          <TableCell component="th" sx={{ width: 180 }}>版本号</TableCell>
+                          <TableCell>{uploadResult.meta.version}</TableCell>
+                          <TableCell align="right">
+                            {uploadResult.validation.is_newer ? (
+                              <Chip label="新版本" color="success" size="small" />
+                            ) : (
+                              <Chip label="旧版本或相同" color="warning" size="small" />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell component="th">Commit</TableCell>
+                          <TableCell sx={{ wordBreak: 'break-all' }} colSpan={2}>
+                            {uploadResult.meta.commit}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell component="th">构建时间</TableCell>
+                          <TableCell colSpan={2}>{formatDateTime(uploadResult.meta.build_time)}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell component="th">二进制 MD5</TableCell>
+                          <TableCell sx={{ wordBreak: 'break-all' }}>
+                            {uploadResult.meta.binary_md5}
+                          </TableCell>
+                          <TableCell align="right">
+                            {uploadResult.validation.binary_md5_match ? (
+                              <CheckCircle color="success" fontSize="small" />
+                            ) : (
+                              <ErrorIcon color="error" fontSize="small" />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell component="th">前端 MD5</TableCell>
+                          <TableCell sx={{ wordBreak: 'break-all' }}>
+                            {uploadResult.meta.frontend_md5}
+                          </TableCell>
+                          <TableCell align="right">
+                            {uploadResult.validation.frontend_md5_match ? (
+                              <CheckCircle color="success" fontSize="small" />
+                            ) : (
+                              <ErrorIcon color="error" fontSize="small" />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell component="th">架构</TableCell>
+                          <TableCell>{uploadResult.meta.arch}</TableCell>
+                          <TableCell align="right">
+                            {uploadResult.validation.arch_match ? (
+                              <CheckCircle color="success" fontSize="small" />
+                            ) : (
+                              <ErrorIcon color="error" fontSize="small" />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+
+                  {uploadResult.validation.error && (
+                    <Alert severity="error" sx={{ mt: 2 }}>
+                      {uploadResult.validation.error}
+                    </Alert>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </Stack>
+        ) : null}
+
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems="stretch">
+          <Card sx={{ flex: 1, minWidth: 0, display: 'flex' }}>
+            <CardContent sx={{ flex: 1 }}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" gap={2} mb={2}>
+                <Box display="flex" alignItems="center" gap={1}>
+                  <Public color="primary" />
+                  <Typography variant="h6">在线更新</Typography>
+                </Box>
+                <Link href={GITHUB_LATEST_RELEASE_PAGE} target="_blank" rel="noreferrer" variant="caption" underline="hover">
+                  GitHub Releases
+                </Link>
+              </Box>
+
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                连接到 GitHub 检查是否有可用的 SimAdmin 更新版本。
+              </Typography>
+
+            <Stack spacing={2} sx={{ mb: 2 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={proxyEnabled}
+                    onChange={event => setProxyEnabled(event.target.checked)}
+                  />
+                }
+                label="启用 GitHub 下载加速"
+              />
+              {proxyEnabled && (
+                <Stack spacing={2} direction={{ xs: 'column', sm: 'row' }}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="proxy-preset-label">加速节点</InputLabel>
+                    <Select
+                      labelId="proxy-preset-label"
+                      label="加速节点"
+                      value={proxyPreset}
+                      onChange={event => setProxyPreset(event.target.value as ProxyPreset)}
+                    >
+                      <MenuItem value="https://gh-proxy.com/">gh-proxy.com (默认)</MenuItem>
+                      <MenuItem value="https://ghproxy.net/">ghproxy.net</MenuItem>
+                      <MenuItem value="https://githubproxy.cc/">githubproxy.cc</MenuItem>
+                      <MenuItem value="custom">自定义</MenuItem>
+                    </Select>
+                  </FormControl>
+                  {proxyPreset === 'custom' && (
+                    <TextField
+                      fullWidth
+                      size="small"
+                      label="自定义加速节点"
+                      value={customProxy}
+                      onChange={event => setCustomProxy(event.target.value)}
+                      placeholder="https://my-proxy.example.com/"
+                    />
+                  )}
+                </Stack>
+              )}
+            </Stack>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'stretch', sm: 'center' }}>
               <Button
@@ -925,15 +1029,19 @@ export default function OtaUpdate() {
                 当前版本 {status?.current_version || 'N/A'} 已经是最新发布的稳定版。
               </Alert>
             )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardContent>
-            <Box display="flex" alignItems="center" gap={1} mb={2}>
-              <CloudUpload color="primary" />
-              <Typography variant="h6">上传更新包</Typography>
-            </Box>
+          <Card sx={{ flex: 1, minWidth: 0, display: 'flex' }}>
+            <CardContent sx={{ flex: 1 }}>
+              <Box display="flex" alignItems="center" gap={1} mb={2}>
+                <CloudUpload color="primary" />
+                <Typography variant="h6">上传更新包</Typography>
+              </Box>
+
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                前往 GitHub Releases 或 QQ 群下载安装包，手动上传即可完成升级或降级。
+              </Typography>
 
             <Alert severity="info" sx={{ mb: 2 }}>
               <AlertTitle>OTA 更新包格式</AlertTitle>
@@ -962,101 +1070,10 @@ export default function OtaUpdate() {
                 <LinearProgress />
               </Box>
             )}
-          </CardContent>
-        </Card>
-
-        {uploadResult && (
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" gap={1} mb={2}>
-                {uploadResult.validation.valid ? (
-                  <CheckCircle color="success" />
-                ) : (
-                  <ErrorIcon color="error" />
-                )}
-                <Typography variant="h6">
-                  验证结果
-                </Typography>
-                <Chip
-                  label={uploadResult.validation.valid ? '通过' : '失败'}
-                  color={uploadResult.validation.valid ? 'success' : 'error'}
-                  size="small"
-                />
-              </Box>
-
-              <TableContainer component={Paper} variant="outlined">
-                <Table size="small">
-                  <TableBody>
-                    <TableRow>
-                      <TableCell component="th" sx={{ width: 180 }}>版本号</TableCell>
-                      <TableCell>{uploadResult.meta.version}</TableCell>
-                      <TableCell align="right">
-                        {uploadResult.validation.is_newer ? (
-                          <Chip label="新版本" color="success" size="small" />
-                        ) : (
-                          <Chip label="旧版本或相同" color="warning" size="small" />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th">Commit</TableCell>
-                      <TableCell sx={{ fontFamily: 'monospace' }} colSpan={2}>
-                        {uploadResult.meta.commit}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th">构建时间</TableCell>
-                      <TableCell colSpan={2}>{formatDateTime(uploadResult.meta.build_time)}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th">二进制 MD5</TableCell>
-                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                        {uploadResult.meta.binary_md5}
-                      </TableCell>
-                      <TableCell align="right">
-                        {uploadResult.validation.binary_md5_match ? (
-                          <CheckCircle color="success" fontSize="small" />
-                        ) : (
-                          <ErrorIcon color="error" fontSize="small" />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th">前端 MD5</TableCell>
-                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                        {uploadResult.meta.frontend_md5}
-                      </TableCell>
-                      <TableCell align="right">
-                        {uploadResult.validation.frontend_md5_match ? (
-                          <CheckCircle color="success" fontSize="small" />
-                        ) : (
-                          <ErrorIcon color="error" fontSize="small" />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell component="th">架构</TableCell>
-                      <TableCell>{uploadResult.meta.arch}</TableCell>
-                      <TableCell align="right">
-                        {uploadResult.validation.arch_match ? (
-                          <CheckCircle color="success" fontSize="small" />
-                        ) : (
-                          <ErrorIcon color="error" fontSize="small" />
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </TableContainer>
-
-              {uploadResult.validation.error && (
-                <Alert severity="error" sx={{ mt: 2 }}>
-                  {uploadResult.validation.error}
-                </Alert>
-              )}
             </CardContent>
           </Card>
-        )}
+        </Stack>
+
       </Stack>
 
       <Dialog open={confirmDialog === 'apply'} onClose={() => setConfirmDialog(null)}>
