@@ -38,8 +38,6 @@ export default function ErrorSnackbar({ error, onClose }: ErrorSnackbarProps) {
     <>
       <Snackbar
         open={!!error}
-        autoHideDuration={6000}
-        resumeHideDuration={3000}
         onClose={handleSnackbarClose}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
       >

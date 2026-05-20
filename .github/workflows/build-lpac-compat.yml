@@ -69,14 +69,39 @@ jobs:
               apt-get update
               apt-get install -y --no-install-recommends \
                 build-essential cmake git ca-certificates zip \
-                pkg-config \
+                pkg-config python3 python3-pip ninja-build \
                 libcurl4-openssl-dev libglib2.0-dev \
-                libpcsclite-dev libqmi-glib-dev
+                libpcsclite-dev libgudev-1.0-dev libglib2.0-doc \
+                libudev-dev udev
 
+              # Debian 11 自带的 meson 太老，通过 pip 安装新版
+              pip3 install meson
+
+              # ── 第一步：从源码编译 libqmi (Debian 11 自带版本 1.26 太老，lpac 要求 >=1.35) ──
+              echo ">>> Building libqmi from source..."
+              git clone --depth 1 --branch 1.36.0 https://gitlab.freedesktop.org/mobile-broadband/libqmi.git /libqmi-src
+              cd /libqmi-src
+              meson setup build \
+                --prefix=/usr/local \
+                --libdir=lib \
+                --buildtype=release \
+                -Dcollection=full \
+                -Dmbim_qmux=false \
+                -Dqrtr=false \
+                -Dintrospection=false \
+                -Dman=false \
+                -Dbash_completion=false \
+                -Dqmi_username=root
+              ninja -C build
+              ninja -C build install
+              ldconfig
+              echo ">>> libqmi installed: $(pkg-config --modversion qmi-glib)"
+
+              # ── 第二步：编译 lpac ──
               git clone --depth 1 --branch "$0" https://github.com/estkme-group/lpac /lpac
               cd /lpac
 
-              # 解析出实际编译版本 (如果是 Tag 则为 Tag 名，如果是 branch 则自动追加 commit)
+              # 解析出实际编译版本
               RESOLVED_VER=$(git describe --tags --always || git rev-parse --short HEAD || echo "$0")
               echo "$RESOLVED_VER" > /output/resolved_version.txt
 
@@ -92,19 +117,28 @@ jobs:
               # 安装到临时目录 (STANDALONE_MODE 输出到 executables/)
               DESTDIR=/tmp/lpac-install cmake --install .
 
-              BUNDLE_ROOT="/tmp/lpac-install/executables"
-              if [ ! -f "$BUNDLE_ROOT/lpac" ]; then
-                echo "ERROR: lpac binary not found at $BUNDLE_ROOT/lpac"
+              # 创建打包目录
+              BUNDLE_ROOT="/tmp/lpac-bundle"
+              mkdir -p "$BUNDLE_ROOT"
+
+              # 动态查找编译并安装好的 lpac 二进制文件
+              LPAC_BIN=$(find /tmp/lpac-install -name lpac -type f | head -1)
+              if [ -z "$LPAC_BIN" ] || [ ! -f "$LPAC_BIN" ]; then
+                echo "ERROR: lpac binary not found in /tmp/lpac-install"
                 ls -laR /tmp/lpac-install/ || true
                 exit 1
               fi
+              cp "$LPAC_BIN" "$BUNDLE_ROOT/lpac"
+              chmod 755 "$BUNDLE_ROOT/lpac"
 
-              # 将 libqmi-glib.so 复制到 lib/ 目录中，使 zip 包自包含
+              # 将自编译的 libqmi-glib.so 复制到 lib/ 目录中，使 zip 包自包含
               mkdir -p "$BUNDLE_ROOT/lib"
-              QMI_SO=$(ldconfig -p | grep "libqmi-glib.so " | head -1 | awk "{print \$NF}")
+              QMI_SO=$(find /usr/local/lib -name "libqmi-glib.so.*.*.*" -type f | head -1)
               if [ -n "$QMI_SO" ]; then
-                cp -L "$QMI_SO" "$BUNDLE_ROOT/lib/libqmi-glib.so.5"
-                ln -sf libqmi-glib.so.5 "$BUNDLE_ROOT/lib/libqmi-glib.so"
+                cp -L "$QMI_SO" "$BUNDLE_ROOT/lib/"
+                QMI_BASENAME=$(basename "$QMI_SO")
+                ln -sf "$QMI_BASENAME" "$BUNDLE_ROOT/lib/libqmi-glib.so.5"
+                ln -sf "$QMI_BASENAME" "$BUNDLE_ROOT/lib/libqmi-glib.so"
               fi
 
               # 验证

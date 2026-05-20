@@ -130,21 +130,27 @@ export default function SMSPage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
-  const fetchMessages = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const fetchMessages = useCallback(async (isBackground = false) => {
+    if (!isBackground) {
+      setLoading(true)
+      setError(null)
+    }
     try {
       const response = await api.getSmsList({ limit: 1000, offset: 0 })
       if (response.status === 'ok' && response.data) {
         setMessages(response.data.messages)
         setConversations(buildConversations(response.data.messages))
       } else {
-        setError(response.message)
+        if (!isBackground) setError(response.message)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (!isBackground) {
+        setError(err instanceof Error ? err.message : String(err))
+      } else {
+        console.warn('Background SMS fetch warning:', err)
+      }
     } finally {
-      setLoading(false)
+      if (!isBackground) setLoading(false)
     }
   }, [])
 
@@ -183,13 +189,13 @@ export default function SMSPage() {
   }, [])
 
   useEffect(() => {
-    void fetchMessages()
+    void fetchMessages(false)
     void fetchStats()
     const interval = setInterval(() => {
       if (inputFocusedRef.current) {
         return
       }
-      void fetchMessages()
+      void fetchMessages(true)
       void fetchStats()
     }, 10000)
     return () => clearInterval(interval)

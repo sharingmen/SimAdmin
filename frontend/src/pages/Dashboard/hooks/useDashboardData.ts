@@ -12,6 +12,7 @@ import type {
   NetworkInterfaceInfo,
 } from '@/api/types'
 import { publicIpv6Addresses } from '@/utils/ip'
+import { isTransientModemError, createThrottledWarner } from '@/utils/modemErrors'
 
 export const SPEED_HISTORY_MAX_POINTS = 30
 
@@ -92,6 +93,8 @@ export interface DashboardActions {
   loadData: () => Promise<void>
 }
 
+const throttledWarn = createThrottledWarner(10_000)
+
 export function useDashboardData(refreshInterval: number, refreshKey: number) {
   const [initialLoading, setInitialLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -136,8 +139,8 @@ export function useDashboardData(refreshInterval: number, refreshKey: number) {
     setSpeedHistory(nextHistory)
   }, [])
 
-  const loadData = useCallback(async () => {
-    setError(null)
+  const loadData = useCallback(async (background = false) => {
+    if (!background) setError(null)
     const failures: string[] = []
 
     const requestOrNull = async <T,>(promise: Promise<T>, label: string): Promise<T | null> => {
@@ -206,8 +209,21 @@ export function useDashboardData(refreshInterval: number, refreshKey: number) {
       } else {
         setQosInfo(null)
       }
+
+      // 错误处理：区分后台轮询与首次/手动加载
       if (failures.length > 0) {
-        setError(failures[0])
+        if (background) {
+          // 后台轮询：过滤 Modem 暂态错误，非暂态错误仍向用户展示
+          const nonTransient = failures.filter((f) => !isTransientModemError(f))
+          if (nonTransient.length > 0) {
+            setError(nonTransient[0])
+          } else {
+            throttledWarn('Dashboard', failures.join('; '))
+          }
+        } else {
+          // 首次加载 / 手动刷新：所有错误都应反馈给用户
+          setError(failures[0])
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -251,13 +267,15 @@ export function useDashboardData(refreshInterval: number, refreshKey: number) {
   }, [roaming])
 
   useEffect(() => {
+    // 首次加载：background = false，错误会展示给用户
     const timeout = window.setTimeout(() => {
-      void loadData()
+      void loadData(false)
     }, 0)
 
     let interval: number | undefined
     if (refreshInterval > 0) {
-      interval = window.setInterval(() => void loadData(), refreshInterval)
+      // 后台轮询：background = true，仅非暂态错误展示
+      interval = window.setInterval(() => void loadData(true), refreshInterval)
     }
 
     return () => {

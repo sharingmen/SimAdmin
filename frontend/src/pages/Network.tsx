@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useMemo, type ChangeEvent } from 'react'
+import { useEffect, useState, useMemo, type ChangeEvent } from 'react'
 import {
   Box,
   Typography,
@@ -62,6 +62,7 @@ import Grid from '@mui/material/Grid'
 import { api, type RadioMode, type BandLockStatus, type BandLockRequest } from '../api'
 import { useRefreshInterval } from '../contexts/RefreshContext'
 import ErrorSnackbar from '../components/ErrorSnackbar'
+import { isTransientModemError, createThrottledWarner } from '../utils/modemErrors'
 import type {
   CellsResponse,
   OperatorListResponse,
@@ -191,6 +192,8 @@ function TabPanel(props: TabPanelProps) {
   )
 }
 
+const throttledWarn = createThrottledWarner(10_000)
+
 export default function NetworkPage() {
   const { refreshInterval, refreshKey } = useRefreshInterval()
   const [initialLoading, setInitialLoading] = useState(true)
@@ -264,7 +267,7 @@ export default function NetworkPage() {
   }
 
   // 加载频段锁定配置（只在首次加载和手动刷新时调用，自动刷新不调用）
-  const loadBandLockConfig = async () => {
+  const loadBandLockConfig = async (background = false) => {
     try {
       setBandConfigRefreshing(true)
       const [radioModeRes, bandLockRes] = await Promise.all([
@@ -284,16 +287,20 @@ export default function NetworkPage() {
         applyBandLockConfigToState(loadSavedBandLockConfig(bandLockRes.data) ?? EMPTY_BAND_LOCK_CONFIG)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      if (background && isTransientModemError(err)) {
+        throttledWarn('Network:BandLock', message)
+      } else {
+        setError(message)
+      }
     } finally {
       setBandConfigRefreshing(false)
     }
   }
 
   // 按当前 Tab 加载数据
-  const loadData = async (activeTab = tabValue) => {
-    setError(null)
-    
+  const loadData = async (activeTab = tabValue, background = false) => {
+    if (!background) setError(null)
     try {
       if (activeTab === 0) {
         const results = await Promise.allSettled([
@@ -324,7 +331,16 @@ export default function NetworkPage() {
         })
 
         if (errMsgs.length > 0) {
-          setError(errMsgs.slice(0, 3).join('；'))
+          if (background) {
+            const nonTransient = errMsgs.filter((msg) => !isTransientModemError(msg))
+            if (nonTransient.length > 0) {
+              setError(nonTransient.slice(0, 3).join('；'))
+            } else {
+              throttledWarn('Network:Cells', errMsgs.join('; '))
+            }
+          } else {
+            setError(errMsgs.slice(0, 3).join('；'))
+          }
         }
       } else if (activeTab === 1) {
         const apnRes = await api.getApnList()
@@ -357,22 +373,27 @@ export default function NetworkPage() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      if (background && isTransientModemError(err)) {
+        throttledWarn('Network', message)
+      } else {
+        setError(message)
+      }
     } finally {
       setInitialLoading(false)
     }
   }
 
   // 首次加载：加载所有数据（包括频段配置）
-  const loadAllData = async () => {
+  const loadAllData = async (background = false) => {
     if (tabValue === 0) {
       await Promise.all([
-        loadData(0),
-        loadBandLockConfig(),
+        loadData(0, background),
+        loadBandLockConfig(background),
       ])
       return
     }
-    await loadData(tabValue)
+    await loadData(tabValue, background)
   }
 
   // 手动刷新频段配置
@@ -748,23 +769,27 @@ export default function NetworkPage() {
         try {
           await api.startCellMonitor()
         } catch (err) {
+          // startCellMonitor 依赖 Modem，开机阶段暂态错误静默处理
           if (!cancelled) {
-            setError(err instanceof Error ? err.message : String(err))
+            const message = err instanceof Error ? err.message : String(err)
+            if (isTransientModemError(err)) {
+              throttledWarn('Network:CellMonitor', message)
+            } else {
+              setError(message)
+            }
           }
         }
       }
 
       if (!cancelled) {
-        await loadAllData()
+        // 首次加载：background = false，错误反馈给用户
+        await loadAllData(false)
       }
 
       if (!cancelled && refreshInterval > 0) {
+        // 后台轮询：background = true，仅非暂态错误展示
         interval = setInterval(() => {
-          if (tabValue === 0) {
-            void loadData(0)
-          } else {
-            void loadData(tabValue)
-          }
+          void loadData(tabValue, true)
         }, refreshInterval)
       }
     }
