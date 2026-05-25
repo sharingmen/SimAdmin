@@ -9,6 +9,7 @@ use crate::db::{CallRecord, Database, SmsMessage};
 use crate::models::{DdnsEvent, VersionUpdateEvent};
 use crate::modem_manager::get_sim_info_data_with_cache;
 use crate::system_event::SystemEvent;
+use crate::verification_code::extract_verification_code;
 use base64::{engine::general_purpose, Engine as _};
 use chrono::{DateTime, Datelike, FixedOffset, NaiveDateTime, Timelike, Utc};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
@@ -127,6 +128,9 @@ impl NotificationEvent<'_> {
                 "phone_number" => message.phone_number.clone(),
                 "content" => message.content.clone(),
                 "own_number" => context.own_number.clone(),
+                "verification_code" => {
+                    extract_verification_code(&message.content).unwrap_or_default()
+                }
                 "direction" => message.direction.clone(),
                 "status" => message.status.clone(),
                 _ => self.summary(),
@@ -2301,6 +2305,7 @@ fn render_sms_template(
         context.own_number.clone()
     };
     let timestamp = render_time_value(&message.timestamp, escape_json);
+    let verification_code = extract_verification_code(&message.content).unwrap_or_default();
 
     template
         .replace("{{id}}", &message.id.to_string())
@@ -2315,6 +2320,8 @@ fn render_sms_template(
         .replace("{{content}}", &content)
         .replace("{{内容}}", &content)
         .replace("{{短信内容}}", &content)
+        .replace("{{verification_code}}", &verification_code)
+        .replace("{{验证码}}", &verification_code)
         .replace("{{direction}}", &message.direction)
         .replace("{{短信方向}}", &message.direction)
         .replace("{{方向}}", &message.direction)
@@ -2622,6 +2629,30 @@ mod tests {
                 false
             ),
             "+10001|+10001|+10001|+10001"
+        );
+    }
+
+    #[test]
+    fn renders_sms_verification_code_variables() {
+        let message = SmsMessage {
+            id: 7,
+            direction: "incoming".to_string(),
+            phone_number: "+10000".to_string(),
+            content: "【谷歌信息】G-248521是您的 Google 验证码".to_string(),
+            timestamp: "2026-05-14T16:30:45Z".to_string(),
+            status: "received".to_string(),
+            pdu: None,
+        };
+        let context = SmsTemplateContext::default();
+
+        assert_eq!(
+            render_sms_template(
+                "{{验证码}}|{{verification_code}}",
+                &message,
+                &context,
+                false
+            ),
+            "248521|248521"
         );
     }
 

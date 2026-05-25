@@ -42,6 +42,7 @@ mod state;
 mod system_event;
 mod system_event_monitor;
 mod utils;
+mod verification_code;
 
 use config::{get_default_config_path, ConfigManager};
 use db::Database;

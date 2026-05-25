@@ -90,6 +90,7 @@ export const MATCH_FIELDS: Record<NotificationEventType, { value: string; label:
     { value: 'summary', label: '内容摘要' },
     { value: 'phone_number', label: '发送方号码' },
     { value: 'content', label: '短信内容' },
+    { value: 'verification_code', label: '验证码' },
     { value: 'own_number', label: '本机号码' },
   ],
   ddns: [
@@ -122,6 +123,7 @@ export const TEMPLATE_VARIABLES: Record<NotificationEventType, TemplateVariable[
     { label: '发送方号码', token: '{{发送方号码}}' },
     { label: '本机号码', token: '{{本机号码}}' },
     { label: '短信内容', token: '{{短信内容}}' },
+    { label: '验证码', token: '{{验证码}}' },
     { label: '时间', token: '{{时间}}' },
     { label: '短信方向', token: '{{短信方向}}' },
     { label: '短信状态', token: '{{短信状态}}' },
