@@ -235,33 +235,37 @@ export default function NotificationRulesTab({
               </List>
             </Box>
           )}
-          <Box sx={{ flex: 1, minWidth: 0, p: 2, overflow: 'auto' }}>
-            {isCompact && (
-              <TextField
-                select
-                size="small"
-                label="消息类型"
-                value={selectedEventType}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => onSelectedEventTypeChange(event.target.value as NotificationEventType)}
-                sx={{ width: '100%', mb: 2 }}
-              >
-                {EVENT_TYPES.map((type) => {
-                  const stats = ruleCountForType(type.key)
-                  return (
-                    <MenuItem key={type.key} value={type.key}>
-                      {`${type.label} (${stats.enabled}/${stats.total})`}
-                    </MenuItem>
-                  )
-                })}
-              </TextField>
-            )}
-            <Box display="flex" alignItems="center" mb={2} gap={1} flexWrap="wrap">
-              <Typography variant="subtitle1" fontWeight={600} noWrap sx={{ minWidth: 0 }}>{eventLabel(selectedEventType)} 规则</Typography>
-              <Chip size="small" label={`共 ${rulesForType.length} 条`} />
-              <Box flexGrow={1} />
-              <Button variant="contained" startIcon={<Add />} onClick={onAddRule} sx={{ whiteSpace: 'nowrap' }}>新建规则</Button>
-              <Button variant="outlined" startIcon={saving ? <CircularProgress size={18} /> : <Save />} disabled={saving} onClick={onSave} sx={{ whiteSpace: 'nowrap' }}>保存配置</Button>
+          <Box sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <Box sx={{ p: 2, pb: 0 }}>
+              {isCompact && (
+                <TextField
+                  select
+                  size="small"
+                  label="消息类型"
+                  value={selectedEventType}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => onSelectedEventTypeChange(event.target.value as NotificationEventType)}
+                  sx={{ width: '100%', mb: 2 }}
+                >
+                  {EVENT_TYPES.map((type) => {
+                    const stats = ruleCountForType(type.key)
+                    return (
+                      <MenuItem key={type.key} value={type.key}>
+                        {`${type.label} (${stats.enabled}/${stats.total})`}
+                      </MenuItem>
+                    )
+                  })}
+                </TextField>
+              )}
+              <Box display="flex" alignItems="center" mb={2} gap={1} flexWrap="wrap">
+                <Typography variant="subtitle1" fontWeight={600} noWrap sx={{ minWidth: 0 }}>{eventLabel(selectedEventType)} 规则</Typography>
+                <Chip size="small" label={`共 ${rulesForType.length} 条`} />
+                <Box flexGrow={1} />
+                <Button variant="contained" startIcon={<Add />} onClick={onAddRule} sx={{ whiteSpace: 'nowrap' }}>新建规则</Button>
+                <Button variant="outlined" startIcon={saving ? <CircularProgress size={18} /> : <Save />} disabled={saving} onClick={onSave} sx={{ whiteSpace: 'nowrap' }}>保存配置</Button>
+              </Box>
             </Box>
+
+            <Box sx={{ flex: 1, minWidth: 0, px: 2, pb: 2, overflow: 'auto' }}>
               {rulesForType.map((rule) => (
                 <Accordion
                   key={rule.id}
@@ -461,11 +465,12 @@ export default function NotificationRulesTab({
                 </Accordion>
               ))}
 
-            {rulesForType.length === 0 && (
-              <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
-                <Typography>暂无规则</Typography>
-              </Paper>
-            )}
+              {rulesForType.length === 0 && (
+                <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
+                  <Typography>暂无规则</Typography>
+                </Paper>
+              )}
+            </Box>
           </Box>
         </Box>
       </CardContent>

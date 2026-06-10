@@ -48,9 +48,9 @@ export type TemplateVariable = {
 }
 
 export const DEFAULT_LOG_CLEANUP: NotificationLogCleanupConfig = {
-  retention_days_enabled: false,
+  retention_days_enabled: true,
   retention_days: 90,
-  max_entries_enabled: false,
+  max_entries_enabled: true,
   max_entries: 10000,
 }
 
