@@ -5680,7 +5680,7 @@ fn record_baseband_step(
     }
 }
 
-fn reset_baseband_restart_progress() {
+pub fn reset_baseband_restart_progress() {
     if let Ok(mut progress) = BASEBAND_RESTART_STEPS.lock() {
         progress.clear();
     }
@@ -5694,7 +5694,18 @@ fn set_baseband_restart_registration(value: Option<String>) {
     }
 }
 
-struct BasebandRestartRunGuard;
+pub fn record_restart_step(step: &str, status: &str, detail: Option<String>) {
+    let item = BasebandRestartStep {
+        step: step.to_string(),
+        status: status.to_string(),
+        detail,
+    };
+    if let Ok(mut progress) = BASEBAND_RESTART_STEPS.lock() {
+        progress.push(item);
+    }
+}
+
+pub struct BasebandRestartRunGuard;
 
 impl Drop for BasebandRestartRunGuard {
     fn drop(&mut self) {
@@ -5744,8 +5755,6 @@ pub async fn power_cycle_sim_for_profile_switch(
     allow_roaming: bool,
     configured_apn: Option<ApnConfig>,
 ) -> Result<BasebandRestartResponse, String> {
-    reset_baseband_restart_progress();
-    let _progress_guard = BasebandRestartRunGuard;
     with_serial(async move {
         power_cycle_sim_for_profile_switch_inner(
             conn,
@@ -5757,6 +5766,7 @@ pub async fn power_cycle_sim_for_profile_switch(
     })
     .await
 }
+
 
 async fn power_cycle_sim_for_profile_switch_inner(
     conn: &Connection,
@@ -5919,15 +5929,16 @@ async fn power_cycle_sim_for_profile_switch_inner(
         }
     };
 
-    match wait_for_radio_search(conn, &modem_path, Duration::from_secs(30)).await {
+    record_baseband_step(&mut steps, "启用基带射频", "running", None);
+    match wait_for_modem_state(conn, &modem_path, Duration::from_secs(10), |s| s >= 3).await {
         Ok(state) => record_baseband_step(
             &mut steps,
-            "等待射频搜索网络",
+            "启用基带射频",
             "ok",
             Some(mm_state_to_string(state).to_string()),
         ),
         Err(err) => {
-            record_baseband_step(&mut steps, "等待射频搜索网络", "error", Some(err.clone()));
+            record_baseband_step(&mut steps, "启用基带射频", "error", Some(err.clone()));
             return Err(err);
         }
     }

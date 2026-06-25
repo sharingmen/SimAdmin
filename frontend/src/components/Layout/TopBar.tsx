@@ -4,7 +4,6 @@ import {
   AppBar,
   Box,
   Button,
-  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -12,7 +11,6 @@ import {
   DialogTitle,
   Divider,
   IconButton,
-  LinearProgress,
   ListItemIcon,
   ListItemText,
   Menu,
@@ -101,27 +99,34 @@ export default function TopBar({
     setBasebandCurrentRegistration(data.current_registration ?? null)
   }
 
+  const getBasebandErrorStep = () => basebandSteps.find(s => s.status === 'error')
+
+  const getCurrentBasebandMessage = () => {
+    const errorStep = getBasebandErrorStep()
+    if (errorStep) return errorStep.detail || `${errorStep.step} 失败`
+    if (!basebandRestarting && basebandSteps.length > 0) return '基带重启和网络恢复成功！'
+    if (basebandSteps.length === 0) return '正在启动基带重启程序...'
+    const lastStep = basebandSteps[basebandSteps.length - 1]
+    return lastStep.status === 'running' ? `正在进行：${lastStep.step}` : `已完成：${lastStep.step}`
+  }
+
+  const getDeviceRebootErrorStep = () => deviceRebootSteps.find(s => s.status === 'error')
+
+  const getCurrentDeviceRebootMessage = () => {
+    const errorStep = getDeviceRebootErrorStep()
+    if (errorStep) return errorStep.detail || `${errorStep.step} 失败`
+    if (systemActionLoading !== 'device' && deviceRebootSteps.length > 0) return '设备已请求重启，即将离线。'
+    const activeStep = deviceRebootSteps.find(s => s.status === 'running')
+    if (activeStep) return `正在进行：${activeStep.step} (${activeStep.detail})`
+    return '正在执行系统重启...'
+  }
+
   const loadBasebandProgress = async () => {
     const response = await api.getBasebandRestartStatus()
     applyBasebandProgress(response.data)
   }
 
-  const getBasebandStatusColor = (status: string): 'default' | 'success' | 'error' | 'warning' | 'info' => {
-    if (status === 'ok') return 'success'
-    if (status === 'error') return 'error'
-    if (status === 'warning') return 'warning'
-    if (status === 'skipped') return 'default'
-    return 'info'
-  }
 
-  const getBasebandStatusLabel = (status: string) => {
-    if (status === 'ok') return '完成'
-    if (status === 'error') return '失败'
-    if (status === 'warning') return '警告'
-    if (status === 'skipped') return '跳过'
-    if (status === 'running') return '进行中'
-    return status
-  }
 
   const handleRestartBaseband = async () => {
     if (basebandRestarting) return
@@ -349,48 +354,55 @@ export default function TopBar({
           </MenuItem>
         </Menu>
 
-        <Dialog open={basebandProgressOpen} onClose={() => { if (!basebandRestarting) setBasebandProgressOpen(false) }} maxWidth="sm" fullWidth>
+        <Dialog open={basebandProgressOpen} onClose={() => { if (!basebandRestarting) setBasebandProgressOpen(false) }} maxWidth="xs" fullWidth>
           <DialogTitle>重启基带</DialogTitle>
-          <DialogContent dividers>
-            {basebandRestarting && <LinearProgress sx={{ mb: 2 }} />}
-            {basebandCurrentRegistration && <Alert severity="info" sx={{ mb: 2 }}>当前注册状态：{basebandCurrentRegistration}</Alert>}
-            <Stack spacing={1}>
-              {basebandSteps.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">等待后端开始记录步骤...</Typography>
+          <DialogContent>
+            <Stack spacing={2} alignItems="center" sx={{ py: 2 }}>
+              {basebandRestarting && !getBasebandErrorStep() && (
+                <CircularProgress size={48} />
+              )}
+              {getBasebandErrorStep() ? (
+                <Alert severity="error" sx={{ width: '100%' }}>{getCurrentBasebandMessage()}</Alert>
+              ) : !basebandRestarting && basebandSteps.length > 0 ? (
+                <Alert severity="success" sx={{ width: '100%' }}>{getCurrentBasebandMessage()}</Alert>
               ) : (
-                basebandSteps.map((step, index) => (
-                  <Box key={`${step.step}-${index}`} sx={{ display: 'grid', gridTemplateColumns: '76px minmax(0, 1fr)', gap: 1.5, alignItems: 'start', borderBottom: '1px solid', borderColor: 'divider', pb: 1 }}>
-                    <Chip size="small" label={getBasebandStatusLabel(step.status)} color={getBasebandStatusColor(step.status)} sx={{ width: 68 }} />
-                    <Box sx={{ minWidth: 0 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{step.step}</Typography>
-                      {step.detail && <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-word' }}>{step.detail}</Typography>}
-                    </Box>
-                  </Box>
-                ))
+                <Typography variant="body1" color="text.secondary" textAlign="center">
+                  {getCurrentBasebandMessage()}
+                </Typography>
+              )}
+              {basebandCurrentRegistration && basebandRestarting && (
+                <Typography variant="caption" color="text.secondary" textAlign="center">
+                  当前注册状态：{basebandCurrentRegistration}
+                </Typography>
               )}
             </Stack>
           </DialogContent>
-          <DialogActions><Button disabled={basebandRestarting} onClick={() => setBasebandProgressOpen(false)}>关闭</Button></DialogActions>
+          <DialogActions>
+            <Button disabled={basebandRestarting} onClick={() => setBasebandProgressOpen(false)}>关闭</Button>
+          </DialogActions>
         </Dialog>
 
-        <Dialog open={deviceRebootProgressOpen} onClose={() => { if (systemActionLoading !== 'device') setDeviceRebootProgressOpen(false) }} maxWidth="sm" fullWidth>
+        <Dialog open={deviceRebootProgressOpen} onClose={() => { if (systemActionLoading !== 'device') setDeviceRebootProgressOpen(false) }} maxWidth="xs" fullWidth>
           <DialogTitle>重启设备</DialogTitle>
-          <DialogContent dividers>
-            {systemActionLoading === 'device' && <LinearProgress sx={{ mb: 2 }} />}
-            <Alert severity="info" sx={{ mb: 2 }}>正在执行 Safe OS Reboot，网络连接会在最后一步中断。</Alert>
-            <Stack spacing={1}>
-              {deviceRebootSteps.map((step, index) => (
-                <Box key={`${step.step}-${index}`} sx={{ display: 'grid', gridTemplateColumns: '76px minmax(0, 1fr)', gap: 1.5, alignItems: 'start', borderBottom: '1px solid', borderColor: 'divider', pb: 1 }}>
-                  <Chip size="small" label={getBasebandStatusLabel(step.status)} color={getBasebandStatusColor(step.status)} sx={{ width: 68 }} />
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{step.step}</Typography>
-                    {step.detail && <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-word' }}>{step.detail}</Typography>}
-                  </Box>
-                </Box>
-              ))}
+          <DialogContent>
+            <Stack spacing={2} alignItems="center" sx={{ py: 2 }}>
+              {systemActionLoading === 'device' && !getDeviceRebootErrorStep() && (
+                <CircularProgress size={48} />
+              )}
+              {getDeviceRebootErrorStep() ? (
+                <Alert severity="error" sx={{ width: '100%' }}>{getCurrentDeviceRebootMessage()}</Alert>
+              ) : systemActionLoading !== 'device' && deviceRebootSteps.length > 0 ? (
+                <Alert severity="success" sx={{ width: '100%' }}>{getCurrentDeviceRebootMessage()}</Alert>
+              ) : (
+                <Typography variant="body1" color="text.secondary" textAlign="center">
+                  {getCurrentDeviceRebootMessage()}
+                </Typography>
+              )}
             </Stack>
           </DialogContent>
-          <DialogActions><Button disabled={systemActionLoading === 'device'} onClick={() => setDeviceRebootProgressOpen(false)}>关闭</Button></DialogActions>
+          <DialogActions>
+            <Button disabled={systemActionLoading === 'device'} onClick={() => setDeviceRebootProgressOpen(false)}>关闭</Button>
+          </DialogActions>
         </Dialog>
 
         <Dialog open={!!restartConfirmTarget} onClose={() => setRestartConfirmTarget(null)}>

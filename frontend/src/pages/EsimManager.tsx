@@ -589,6 +589,7 @@ export default function EsimManagerPage() {
   const [basebandRecoverySteps, setBasebandRecoverySteps] = useState<BasebandRestartStep[]>([])
   const [basebandRecoveryRegistration, setBasebandRecoveryRegistration] = useState<string | null>(null)
   const basebandRecoveryTimerRef = useRef<number | undefined>(undefined)
+  const [vowifiEnabled, setVowifiEnabled] = useState(false)
 
   const euiccCardRef = useRef<HTMLDivElement | null>(null)
   const [gridHeight, setGridHeight] = useState<string | number>('calc(100vh - 350px)')
@@ -822,6 +823,12 @@ export default function EsimManagerPage() {
     }
 
     try {
+      void api.getVowifiControl().then((res) => {
+        if (res.data) {
+          setVowifiEnabled(res.data.connection_enabled)
+        }
+      }).catch(() => { /* ignore */ })
+
       if (profiles.length === 0) {
         setProfilesLoading(true)
         const cachedProfilesRes = await requestOrNull(api.getCachedEsimProfiles(), 'profiles-cache', false)
@@ -946,6 +953,13 @@ export default function EsimManagerPage() {
     setBasebandRecoveryRunning(true)
     setBasebandRecoverySteps([])
     setBasebandRecoveryRegistration(null)
+
+    void api.getVowifiControl().then((res) => {
+      if (res.data) {
+        setVowifiEnabled(res.data.connection_enabled)
+      }
+    }).catch(() => { /* ignore */ })
+
     // Poll every 1s until baseband recovery finishes
     const timer = window.setInterval(() => {
       void loadBasebandRecoveryStatus().then((finished) => {
@@ -968,21 +982,17 @@ export default function EsimManagerPage() {
     }
   }, [])
 
-  const getRecoveryStatusColor = (status: string): 'default' | 'success' | 'error' | 'warning' | 'info' => {
-    if (status === 'ok') return 'success'
-    if (status === 'error') return 'error'
-    if (status === 'warning') return 'warning'
-    if (status === 'skipped') return 'default'
-    return 'info'
-  }
+  const getRecoveryErrorStep = () => basebandRecoverySteps.find(s => s.status === 'error')
 
-  const getRecoveryStatusLabel = (status: string) => {
-    if (status === 'ok') return '完成'
-    if (status === 'error') return '失败'
-    if (status === 'warning') return '警告'
-    if (status === 'skipped') return '跳过'
-    if (status === 'running') return '进行中'
-    return status
+  const getCurrentRecoveryMessage = () => {
+    const errorStep = getRecoveryErrorStep()
+    if (errorStep) return errorStep.detail || `${errorStep.step} 失败`
+    if (!basebandRecoveryRunning && basebandRecoverySteps.length > 0) {
+      return vowifiEnabled ? '网络和 VoWiFi 恢复成功！' : '网络恢复成功！'
+    }
+    if (basebandRecoverySteps.length === 0) return '正在启动恢复程序...'
+    const lastStep = basebandRecoverySteps[basebandRecoverySteps.length - 1]
+    return lastStep.status === 'running' ? `正在进行：${lastStep.step}` : `已完成：${lastStep.step}`
   }
 
   const runProfileAction = async () => {
@@ -1838,48 +1848,28 @@ export default function EsimManagerPage() {
       <Dialog
         open={basebandRecoveryOpen}
         onClose={() => { if (!basebandRecoveryRunning) setBasebandRecoveryOpen(false) }}
-        maxWidth="sm"
+        maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>基带恢复</DialogTitle>
-        <DialogContent dividers>
-          {basebandRecoveryRunning && <LinearProgress sx={{ mb: 2 }} />}
-          {basebandRecoveryRegistration && (
-            <Alert severity="info" sx={{ mb: 2 }}>当前注册状态：{basebandRecoveryRegistration}</Alert>
-          )}
-          <Stack spacing={1}>
-            {basebandRecoverySteps.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">等待后端开始记录步骤...</Typography>
+        <DialogTitle>eSIM 切卡恢复</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} alignItems="center" sx={{ py: 2 }}>
+            {basebandRecoveryRunning && !getRecoveryErrorStep() && (
+              <CircularProgress size={48} />
+            )}
+            {getRecoveryErrorStep() ? (
+              <Alert severity="error" sx={{ width: '100%' }}>{getCurrentRecoveryMessage()}</Alert>
+            ) : !basebandRecoveryRunning && basebandRecoverySteps.length > 0 ? (
+              <Alert severity="success" sx={{ width: '100%' }}>{getCurrentRecoveryMessage()}</Alert>
             ) : (
-              basebandRecoverySteps.map((step, index) => (
-                <Box
-                  key={`${step.step}-${index}`}
-                  sx={{
-                    display: 'grid',
-                    gridTemplateColumns: '76px minmax(0, 1fr)',
-                    gap: 1.5,
-                    alignItems: 'start',
-                    borderBottom: '1px solid',
-                    borderColor: 'divider',
-                    pb: 1,
-                  }}
-                >
-                  <Chip
-                    size="small"
-                    label={getRecoveryStatusLabel(step.status)}
-                    color={getRecoveryStatusColor(step.status)}
-                    sx={{ width: 68 }}
-                  />
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{step.step}</Typography>
-                    {step.detail && (
-                      <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
-                        {step.detail}
-                      </Typography>
-                    )}
-                  </Box>
-                </Box>
-              ))
+              <Typography variant="body1" color="text.secondary" textAlign="center">
+                {getCurrentRecoveryMessage()}
+              </Typography>
+            )}
+            {basebandRecoveryRegistration && basebandRecoveryRunning && (
+              <Typography variant="caption" color="text.secondary" textAlign="center">
+                当前注册状态：{basebandRecoveryRegistration}
+              </Typography>
             )}
           </Stack>
         </DialogContent>

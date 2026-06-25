@@ -297,9 +297,10 @@ class SimAdminCurrentAPI {
     return request<ApiResponse<EsimCommandResponse>>(`/esim/profiles/${encodeURIComponent(iccid)}/enable`, {
       method: 'POST',
       body: JSON.stringify({}),
-      timeoutMs: 30000,
+      timeoutMs: 10000,
     })
   }
+
 
   async renameEsimProfile(iccid: string, name: string) {
     return request<ApiResponse<EsimCommandResponse>>(`/esim/profiles/${encodeURIComponent(iccid)}/rename`, {

@@ -18,6 +18,7 @@ use tracing::{error, info, warn};
 use zbus::Connection;
 
 use crate::{
+    modem_manager,
     config::{ApnConfig, VowifiConfig},
     db::{
         NewVowifiSmsDelivery, NewVowifiSmsPart, SmsMessage, VowifiEsimRestoreEntry,
@@ -547,16 +548,23 @@ pub async fn enable_esim_profile_handler(
         );
         let _ = reset_vowifi_runtime(&app, "vowifi_profile_switch_pre_teardown").await;
     }
-    match app.esim_supervisor.enable_profile(iccid.clone()).await {
-        Ok(mut data) => {
-            if esim_command_succeeded(&data) {
-                // Spawn the heavy power-cycle + network recovery work in the background
-                // so the API responds instantly after the lpac enable command succeeds.
-                // The frontend can poll /api/baseband/restart/status for live progress.
-                let bg_app = app.clone();
-                let bg_event_entity = event_entity.clone();
-                let bg_switch_token = switch_token.clone();
-                tokio::spawn(async move {
+
+    // Reset baseband restart steps progress
+    modem_manager::reset_baseband_restart_progress();
+    modem_manager::record_restart_step("启用 eSIM Profile", "running", None);
+
+    let bg_app = app.clone();
+    let bg_iccid = iccid.clone();
+    let bg_event_entity = event_entity.clone();
+    let bg_switch_token = switch_token.clone();
+
+    tokio::spawn(async move {
+        let _guard = modem_manager::BasebandRestartRunGuard;
+
+        match bg_app.esim_supervisor.enable_profile(bg_iccid.clone()).await {
+            Ok(data) => {
+                if esim_command_succeeded(&data) {
+                    modem_manager::record_restart_step("启用 eSIM Profile", "ok", None);
                     let auto_connect_data = !bg_app.data_user_disabled.load(Ordering::SeqCst);
                     let allow_roaming = bg_app.config_manager.get_roaming_allowed();
                     let apn_config = bg_app.config_manager.get_apn_config();
@@ -614,44 +622,51 @@ pub async fn enable_esim_profile_handler(
                             }
                         }
                     }
-                });
-
-                data.msg =
-                    "Profile enabled, baseband recovery started in background".to_string();
-            } else {
-                app.system_event_emitter
+                } else {
+                    modem_manager::record_restart_step("启用 eSIM Profile", "error", Some(data.msg.clone()));
+                    bg_app.system_event_emitter
+                        .emit_code(
+                            system_event_codes::ESIM_PROFILE_ENABLE_FAILED,
+                            system_event_severity::WARNING,
+                            system_event_status::FAILED,
+                            bg_event_entity.clone(),
+                            format!("Profile 启用失败: {}", data.msg),
+                        )
+                        .await;
+                }
+            }
+            Err(err) => {
+                let message = err.message();
+                modem_manager::record_restart_step("启用 eSIM Profile", "error", Some(message.clone()));
+                bg_app.system_event_emitter
                     .emit_code(
                         system_event_codes::ESIM_PROFILE_ENABLE_FAILED,
                         system_event_severity::WARNING,
                         system_event_status::FAILED,
-                        event_entity.clone(),
-                        format!("Profile 启用失败: {}", data.msg),
+                        bg_event_entity.clone(),
+                        format!("Profile 启用失败: {message}"),
                     )
                     .await;
             }
-            (
-                StatusCode::OK,
-                Json(ApiResponse::success_with_message(
-                    "Profile enable requested",
-                    data,
-                )),
-            )
         }
-        Err(err) => {
-            let message = err.message();
-            app.system_event_emitter
-                .emit_code(
-                    system_event_codes::ESIM_PROFILE_ENABLE_FAILED,
-                    system_event_severity::WARNING,
-                    system_event_status::FAILED,
-                    event_entity,
-                    format!("Profile 启用失败: {message}"),
-                )
-                .await;
-            esim_error_response::<EsimCommandResponse>(err)
-        }
-    }
+    });
+
+    let success_resp = EsimCommandResponse {
+        code: 0,
+        status: "success".to_string(),
+        action: "enable".to_string(),
+        msg: "Profile enable task started in background".to_string(),
+        data: None,
+    };
+    (
+        StatusCode::OK,
+        Json(ApiResponse::success_with_message(
+            "Profile enable requested",
+            success_resp,
+        )),
+    )
 }
+
 
 
 /// POST /api/esim/profiles/{iccid}/rename
