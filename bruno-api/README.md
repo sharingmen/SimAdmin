@@ -128,6 +128,20 @@
 - **set_notification_config.bru** - 设置多渠道通知配置
 - **test_notification_channel.bru** - 测试指定通知渠道，可通过 `channel` 变量切换
 
+### WiFi Calling (VoWiFi) 接口
+- **get_vowifi_status.bru** - 获取 VoWiFi 连接状态
+- **get_vowifi_control.bru** - 获取 VoWiFi 控制配置
+- **set_vowifi_feature.bru** - 开启或关闭 VoWiFi 功能（控制 UI 和功能的激活）
+- **set_vowifi_connection.bru** - 开启或关闭 VoWiFi 连接（控制后台隧道的拨号）
+- **post_vowifi_connect.bru** - 手动触发 VoWiFi 立即连接与重试
+- **get_vowifi_profile.bru** - 获取当前匹配的 VoWiFi 运营商配置详情
+- **get_vowifi_profiles.bru** - 获取系统支持的所有预设 VoWiFi 运营商配置
+- **get_vowifi_diagnostics.bru** - 获取 VoWiFi 诊断详细数据与时序监控数据
+- **get_vowifi_events.bru** - 获取 VoWiFi 运行日志流
+- **get_vowifi_soak.bru** - 获取 VoWiFi 稳定性压力测试运行记录
+- **get_vowifi_sms_delivery.bru** - 获取基于 IPsec 隧道的短信投递记录列表
+- **get_vowifi_esim_restore_status.bru** - 获取 eSIM 切卡与基带状态恢复的同步进度
+
 ## 使用方法
 
 1. **安装 Bruno**
@@ -219,6 +233,18 @@
 | GET | `/api/notifications/config` | 获取多渠道通知配置 |
 | POST | `/api/notifications/config` | 设置多渠道通知配置 |
 | POST | `/api/notifications/test/:channel` | 测试指定通知渠道 |
+| GET | `/api/vowifi/status` | 获取 VoWiFi 连接状态 |
+| GET | `/api/vowifi/control` | 获取 VoWiFi 控制配置 |
+| POST | `/api/vowifi/feature` | 开启/关闭 VoWiFi 功能 |
+| POST | `/api/vowifi/connection` | 启用/停止 VoWiFi 隧道连接 |
+| POST | `/api/vowifi/connect` | 立即手动触发 VoWiFi 连接 |
+| GET | `/api/vowifi/profile` | 获取当前匹配的 VoWiFi 配置 |
+| GET | `/api/vowifi/profiles` | 列出所有 VoWiFi 预设配置 |
+| GET | `/api/vowifi/diagnostics` | 获取 VoWiFi 诊断详细数据 |
+| GET | `/api/vowifi/events` | 获取 VoWiFi 运行日志流 |
+| GET | `/api/vowifi/soak` | 获取 VoWiFi 稳定性压测记录 |
+| GET | `/api/vowifi/sms/delivery` | 获取 VoWiFi 短信投递日志 |
+| GET | `/api/vowifi/esim-restore/status` | 获取基带/eSIM 状态恢复进度 |
 
 ## USB 模式说明
 
