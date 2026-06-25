@@ -248,7 +248,15 @@ function deriveSteps(state: LoadState, connectionEnabled: boolean): FlowStep[] {
       const failedStep = tunnelSteps.find(s => s.state === 'failed')
       if (failedStep) {
         steps[2].state = 'failed'
-        steps[2].description = '连接超时：网关握手无响应。排查建议：请检查当前网络是否可用或是否启用代理'
+        if (failedStep.id === 'usim_aka' || failedStep.id === 'sim_auth') {
+          steps[2].description = 'SIM 卡鉴权失败。排查建议：请检查 SIM 卡卡槽、运营商套餐状态，或确认是否开启了连接授权'
+        } else if (failedStep.id === 'epdg_transport' || failedStep.id === 'epdg') {
+          steps[2].description = '网关域名解析或连接失败。排查建议：请检查当前网络是否可用，确认是否开启了对应区域的 VPN 代理，并确保 DNS 未被污染'
+        } else if (failedStep.id === 'ikev2_eap_aka' || failedStep.id === 'ike' || failedStep.id === 'child_sa') {
+          steps[2].description = '安全通道协商失败。排查建议：请检查上游网络连接，确认是否已开启对应区域的 VPN 代理，并确保 UDP 500/4500 端口未被防火墙或运营商阻断'
+        } else {
+          steps[2].description = '连接超时：网关握手无响应。排查建议：请检查上游网络与 VPN 代理连接，并确保 UDP 500/4500 端口未被限制'
+        }
         steps[2].detail = failedStep.blocking_reason || undefined
       } else {
         const activeStep = tunnelSteps.find(s => s.state === 'active' || s.state === 'ready')
@@ -465,10 +473,12 @@ export default function VowifiDiagnosticsPage() {
     const latestConnectEvent = state.diagnostics?.timeline?.find(
       (item) => item.phase === 'connect_start'
     )
+    const timeline = state.diagnostics?.timeline
+    const lastTimestamp = timeline && timeline.length > 0 ? timeline[timeline.length - 1].timestamp : null
     const startedAt = latestConnectEvent?.timestamp 
       ? Date.parse(latestConnectEvent.timestamp.replace(' ', 'T')) 
-      : (state.diagnostics?.timeline && state.diagnostics.timeline.length > 0 
-          ? Date.parse(state.diagnostics.timeline[state.diagnostics.timeline.length - 1].timestamp.replace(' ', 'T')) 
+      : (lastTimestamp 
+          ? Date.parse(lastTimestamp.replace(' ', 'T')) 
           : null)
 
     let initialSeconds = 0
@@ -543,9 +553,20 @@ export default function VowifiDiagnosticsPage() {
     const todayStr = `${yyyy}-${mm}-${dd}`;
 
     const todayDeliveries = deliveries.filter(d => d.created_at && d.created_at.startsWith(todayStr))
-    const incoming = todayDeliveries.filter(d => d.direction?.toLowerCase()?.includes('in') || d.direction?.toLowerCase()?.includes('mt'))
-    const outgoing = todayDeliveries.filter(d => d.direction?.toLowerCase()?.includes('out') || d.direction?.toLowerCase()?.includes('mo'))
-    const successOutgoing = outgoing.filter(d => d.state?.toLowerCase() === 'delivered' || d.state?.toLowerCase() === 'success' || d.state?.toLowerCase() === 'sent')
+    const incoming = todayDeliveries.filter(d => {
+      const dir = d.direction?.toLowerCase()
+      return dir === 'incoming' || dir === 'mobile_terminated' || dir === 'mt'
+    })
+    const outgoing = todayDeliveries.filter(d => {
+      const dir = d.direction?.toLowerCase()
+      return dir === 'outgoing' || dir === 'mobile_originated' || dir === 'mo'
+    })
+    const successOutgoing = outgoing.filter(d => 
+      d.state?.toLowerCase() === 'delivered' || 
+      d.state?.toLowerCase() === 'success' || 
+      d.state?.toLowerCase() === 'sent' ||
+      d.state?.toLowerCase() === 'accepted'
+    )
 
     return {
       receivedCount: incoming.length,

@@ -496,7 +496,7 @@ fn diagnostics_timeline(
     // ── Translated runtime events ──
     for event in &events.events {
         let (kind, title, detail) =
-            translate_runtime_event(&event.event_type, &event.phase, event.profile_id.as_deref());
+            translate_runtime_event(&event.event_type, &event.phase, event.profile_id.as_deref(), &event.detail_json);
         timeline.push(VowifiDiagnosticsTimelineEntry {
             kind,
             timestamp: Some(event.created_at.clone()),
@@ -519,7 +519,12 @@ fn translate_runtime_event(
     event_type: &str,
     phase: &str,
     profile_id: Option<&str>,
+    detail_json: &str,
 ) -> (String, String, String) {
+    let reason = serde_json::from_str::<serde_json::Value>(detail_json)
+        .ok()
+        .and_then(|v| v.get("reason").and_then(|r| r.as_str()).map(|s| s.to_string()));
+
     match event_type {
         // ── SIM / Identity ──────────────────────────────────────
         "identity_refresh" => match phase {
@@ -536,11 +541,63 @@ fn translate_runtime_event(
                 "正在读取 SIM 卡物理标识...".into(),
             ),
         },
-        "identity_failed" | "identity_timeout" => (
-            "IMSI".into(),
-            "未检测到物理 SIM 卡或 eSIM 卡".into(),
-            "读取物理区失败，USIM 物理接口层评估超时。".into(),
-        ),
+        "identity_failed" | "identity_timeout" => {
+            if let Some(ref r) = reason {
+                match r.as_str() {
+                    "live_network_executor_disabled" => (
+                        "IMSI".into(),
+                        "安全门控拦截：未启用网络访问授权".into(),
+                        "当前配置禁用了实时网络拨号授权。请在服务配置或环境变量中开启 SIMADMIN_VOWIFI_LIVE_NETWORK_ALLOWED = 1。".into(),
+                    ),
+                    "device_state_change_executor_disabled" => (
+                        "IMSI".into(),
+                        "安全门控拦截：未启用状态修改授权".into(),
+                        "当前配置禁用了实时设备状态修改授权。请在服务配置或环境变量中开启 SIMADMIN_VOWIFI_DEVICE_CHANGES_ALLOWED = 1。".into(),
+                    ),
+                    "sim_auth_logical_channel_failed" => (
+                        "IMSI".into(),
+                        "分配 USIM 逻辑通道失败".into(),
+                        "无法为 USIM 鉴权分配逻辑通道。原因可能是基带辅助逻辑通道数被占满，请尝试重启设备或调制解调器。".into(),
+                    ),
+                    "sim_auth_platform_unsupported" => (
+                        "IMSI".into(),
+                        "平台不支持物理卡鉴权".into(),
+                        "当前运行平台不支持 QMI 物理卡鉴权交互（仅在 Linux/QMI 模式下支持）。".into(),
+                    ),
+                    "sim_auth_proxy_connect_failed" => (
+                        "IMSI".into(),
+                        "连接 QMI Proxy 代理失败".into(),
+                        "无法连接到 QMI 代理套接字。请检查 qmi-proxy 服务是否正在运行。".into(),
+                    ),
+                    "sim_auth_proxy_open_failed" => (
+                        "IMSI".into(),
+                        "打开 QMI 设备节点失败".into(),
+                        "无法通过 QMI 代理打开指定的调制解调器设备节点。请确认设备路径正确且具有访问权限。".into(),
+                    ),
+                    "sim_auth_uim_client_failed" => (
+                        "IMSI".into(),
+                        "初始化 UIM 客户端失败".into(),
+                        "初始化 QMI UIM 服务客户端失败，Modem 可能处于未就绪状态。".into(),
+                    ),
+                    "sim_auth_apdu_build_failed" | "sim_auth_apdu_exchange_failed" | "sim_auth_runtime_failed" => (
+                        "IMSI".into(),
+                        "USIM 物理卡鉴权交互失败".into(),
+                        "向 SIM 卡发送 AKA 鉴权 APDU 指令失败。请确认 SIM 卡是否松动、损坏，或者是否支持 USIM AKA 鉴权算法。".into(),
+                    ),
+                    _ => (
+                        "IMSI".into(),
+                        "物理卡识别或鉴权失败".into(),
+                        format!("读取物理区失败，错误原因: {}", r),
+                    )
+                }
+            } else {
+                (
+                    "IMSI".into(),
+                    "未检测到物理 SIM 卡或 eSIM 卡".into(),
+                    "读取物理区失败，USIM 物理接口层评估超时。".into(),
+                )
+            }
+        }
 
         // ── Profile Matching ────────────────────────────────────
         "profile_match" | "profile_matched" => (
@@ -573,11 +630,38 @@ fn translate_runtime_event(
             "DNS 解析成功".into(),
             "已成功解析 ePDG 网关 IP 地址。".into(),
         ),
-        "dns_failed" | "dns_timeout" => (
-            "DNS".into(),
-            "DNS 解析失败".into(),
-            "无法解析运营商 ePDG 域名，请检查网络连接。".into(),
-        ),
+        "dns_failed" | "dns_timeout" => {
+            if let Some(ref r) = reason {
+                match r.as_str() {
+                    "epdg_dns_resolution_failed" => (
+                        "DNS".into(),
+                        "DNS 解析失败".into(),
+                        "解析运营商 ePDG 域名失败，当前网络可能无法访问公网，或者 DNS 服务器不支持解析运营商专用域名。".into(),
+                    ),
+                    "epdg_dns_resolution_timeout" => (
+                        "DNS".into(),
+                        "DNS 解析超时".into(),
+                        "解析运营商 ePDG 域名超时，请检查网络连接或更换更稳定的 DNS 服务器。".into(),
+                    ),
+                    "epdg_no_address" => (
+                        "DNS".into(),
+                        "未解析到有效网关 IP".into(),
+                        "域名解析成功，但未返回任何可用的 ePDG 网关 IPv4/IPv6 地址。".into(),
+                    ),
+                    _ => (
+                        "DNS".into(),
+                        "DNS 解析失败".into(),
+                        format!("无法解析运营商 ePDG 域名，错误原因: {}", r),
+                    )
+                }
+            } else {
+                (
+                    "DNS".into(),
+                    "DNS 解析失败".into(),
+                    "无法解析运营商 ePDG 域名，请检查网络连接。".into(),
+                )
+            }
+        }
 
         // ── IPsec / IKEv2 / Tunnel ─────────────────────────────
         "ike_sa_init" | "sa_init_request_built" => (
@@ -610,11 +694,53 @@ fn translate_runtime_event(
             "IPsec ESP 加密隧道建立成功".into(),
             "安全通道已就绪，数据面加密保护已启用。".into(),
         ),
-        "ike_timeout" | "ike_failed" | "tunnel_failed" => (
-            "IPSEC".into(),
-            "发送 IKE_SA_INIT 后未收到响应报文".into(),
-            "重试后超时，运营商边界防火墙可能封禁了 UDP 500/4500 端口。".into(),
-        ),
+        "ike_timeout" | "ike_failed" | "tunnel_failed" => {
+            if let Some(ref r) = reason {
+                match r.as_str() {
+                    "ike_sa_init_response_rejected" => (
+                        "IPSEC".into(),
+                        "IKE_SA_INIT 网关拒绝连接".into(),
+                        "网关拒绝了初始安全关联请求。请确认运营商是否封禁了您的 IP 地址，或当前网络是否封锁了 UDP 500 端口。".into(),
+                    ),
+                    "ike_auth_notify_authentication_failed" => (
+                        "IPSEC".into(),
+                        "EAP-AKA 身份鉴权被网关拒绝".into(),
+                        "运营商网关拒绝了您的 SIM 卡鉴权。排查建议：请确认当前 IP 是否与该卡归属国一致，或确认该卡是否已开通并启用了 VoWiFi 业务。".into(),
+                    ),
+                    "ike_auth_final_request_build_failed" | "eap_aka_success_not_reached" => (
+                        "IPSEC".into(),
+                        "EAP-AKA 身份鉴权未通过".into(),
+                        "SIM 卡 EAP-AKA 鉴权凭证被运营商网关拒绝。可能原因：当前卡未开通 VoWiFi 服务、套餐封禁、或者基带中固定拨号（FDN/PIN2）导致鉴权失效。".into(),
+                    ),
+                    "eap_aka_msk_unavailable" => (
+                        "IPSEC".into(),
+                        "AKA 主会话密钥生成失败".into(),
+                        "鉴权虽然成功，但无法派生主会话密钥 (MSK)，无法建立后续安全隧道。".into(),
+                    ),
+                    "ike_dh_shared_secret_failed" | "ike_session_key_derivation_failed" => (
+                        "IPSEC".into(),
+                        "IKE 密钥协商派生失败".into(),
+                        "Diffie-Hellman 共享密钥计算或会话密钥派生失败。".into(),
+                    ),
+                    "ike_sa_init_timeout" | "ike_auth_challenge_timeout" => (
+                        "IPSEC".into(),
+                        "IKE 协商握手超时".into(),
+                        "未收到网关响应，请检查上游网络连接，确认是否已开启代理，并确保网络未阻断 UDP 500/4500 端口。".into(),
+                    ),
+                    _ => (
+                        "IPSEC".into(),
+                        "IKEv2 协商失败".into(),
+                        format!("与网关的安全协商失败，错误原因: {}", r),
+                    )
+                }
+            } else {
+                (
+                    "IPSEC".into(),
+                    "发送 IKE_SA_INIT 后未收到响应报文".into(),
+                    "重试后超时，运营商边界防火墙可能封禁了 UDP 500/4500 端口。".into(),
+                )
+            }
+        }
         "ike_teardown" | "tunnel_teardown" | "ike_informational" => (
             "IPSEC".into(),
             "发送 IKEv2 INFORMATIONAL 报文，拆除全部 ESP 安全关联并注销会话。".into(),
@@ -632,11 +758,38 @@ fn translate_runtime_event(
             "核心网响应: SIP/2.0 200 OK".into(),
             "IMS 会话就绪，已分配 SIP 接入关联路由。".into(),
         ),
-        "ims_register_rejected" | "ims_403" | "sip_403" => (
-            "SIP".into(),
-            "SIP/2.0 403 Forbidden".into(),
-            "IMS 鉴权未通过 (AKA response mismatch)。".into(),
-        ),
+        "ims_register_rejected" | "ims_403" | "sip_403" => {
+            if let Some(ref r) = reason {
+                match r.as_str() {
+                    "ims_register_auth_rejected" => (
+                        "SIP".into(),
+                        "IMS 注册鉴权失败".into(),
+                        "SIP 注册时鉴权响应被拒绝。请确保您的 SIM 卡具备合法的 VoWiFi 权限，并联系运营商开通此项服务。".into(),
+                    ),
+                    "ims_register_response_parse_failed" => (
+                        "SIP".into(),
+                        "IMS 注册响应解析失败".into(),
+                        "无法解析来自 IMS 核心网的 SIP 响应报文，可能协议版本不兼容。".into(),
+                    ),
+                    "ims_register_unexpected_status" => (
+                        "SIP".into(),
+                        "IMS 注册返回异常状态".into(),
+                        "IMS 注册请求被运营商返回了非预期的 SIP 错误状态码。".into(),
+                    ),
+                    _ => (
+                        "SIP".into(),
+                        "IMS 注册失败".into(),
+                        format!("运营商 SIP 核心网拒绝了注册请求，错误原因: {}", r),
+                    )
+                }
+            } else {
+                (
+                    "SIP".into(),
+                    "SIP/2.0 403 Forbidden".into(),
+                    "IMS 鉴权未通过 (AKA response mismatch)。".into(),
+                )
+            }
+        }
         "ims_deregistered" | "ims_unregister" => (
             "SIP".into(),
             "IMS 会话已注销".into(),

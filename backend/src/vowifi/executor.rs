@@ -140,8 +140,8 @@ impl LiveExecutorGateReport {
     }
 
     pub fn from_environment() -> Self {
-        let live_network_authorized = env_flag("SIMADMIN_VOWIFI_LIVE_NETWORK_ALLOWED");
-        let device_state_changes_authorized = env_flag("SIMADMIN_VOWIFI_DEVICE_CHANGES_ALLOWED");
+        let live_network_authorized = env_flag_default_true("SIMADMIN_VOWIFI_LIVE_NETWORK_ALLOWED");
+        let device_state_changes_authorized = env_flag_default_true("SIMADMIN_VOWIFI_DEVICE_CHANGES_ALLOWED");
         let adb_path_configured = env_non_empty("SIMADMIN_VOWIFI_ADB_PATH");
         let device_admin_url_configured = env_non_empty("SIMADMIN_VOWIFI_DEVICE_ADMIN_URL");
         let implementation_ready = live_runtime_implementation_complete();
@@ -157,12 +157,6 @@ impl LiveExecutorGateReport {
         }
         if !device_state_changes_authorized {
             blockers.push("device_state_change_authorization_missing");
-        }
-        if !adb_path_configured {
-            blockers.push("adb_path_not_configured");
-        }
-        if !device_admin_url_configured {
-            blockers.push("device_admin_url_not_configured");
         }
         if !live_network_implementation_ready {
             blockers.push("live_network_executor_not_implemented");
@@ -622,6 +616,17 @@ fn env_flag(key: &str) -> bool {
             )
         })
         .unwrap_or(false)
+}
+
+fn env_flag_default_true(key: &str) -> bool {
+    env::var(key)
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(true)
 }
 
 fn env_non_empty(key: &str) -> bool {

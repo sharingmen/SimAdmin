@@ -408,13 +408,18 @@ impl VowifiRuntime {
                             _ => ("", ""),
                         };
                         if !event_type.is_empty() {
+                            let detail_json = if let Some(ref reason) = result.reason {
+                                serde_json::json!({ "reason": reason }).to_string()
+                            } else {
+                                "{}".to_string()
+                            };
                             let _ = database.insert_vowifi_runtime_event(crate::db::NewVowifiRuntimeEvent {
                                 trace_id: Some("runtime-connect"),
                                 level: "error",
                                 phase,
                                 profile_id: profile_id.as_deref(),
                                 event_type,
-                                detail_json: "{}",
+                                detail_json: &detail_json,
                             });
                         }
                     }
