@@ -1,1 +1,73 @@
+name: Release Linux AMD64
 
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # 安装 Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 安装 pnpm
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      # 安装前端依赖
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      # 编译前端
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build
+
+      # 安装 Rust
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # Rust 缓存（加快编译）
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      # 编译后端
+      - name: Build backend
+        working-directory: backend
+        run: cargo build --release
+
+      # 打包
+      - name: Package
+        run: |
+          mkdir -p package
+
+          cp backend/target/release/simadmin package/
+
+          cp -r frontend/dist package/web
+
+          chmod +x package/simadmin
+
+          tar -czf SimAdmin-linux-amd64.tar.gz package
+
+      # 创建 GitHub Release
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            SimAdmin-linux-amd64.tar.gz
